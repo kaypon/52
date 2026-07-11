@@ -1,0 +1,34 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DATABASE_URL_UNPOOLED")
+}
+
+model DeckHash {
+  hash          String           @id
+  deckOrder     Json             @map("deck_order")
+  firstSeenAt   DateTime         @default(now()) @map("first_seen_at")
+  seenCount     Int              @default(1) @map("seen_count")
+  firstNickname String?          @map("first_nickname")
+  submissions   DeckSubmission[]
+
+  @@map("deck_hashes")
+}
+
+model DeckSubmission {
+  id         String   @id @default(cuid())
+  hash       String
+  submittedAt DateTime @default(now()) @map("submitted_at")
+  nickname   String?
+  actionCount Int      @map("action_count")
+  durationMs Int       @map("duration_ms")
+  actions    Json
+  deckHash   DeckHash  @relation(fields: [hash], references: [hash], onDelete: Cascade)
+
+  @@index([hash])
+  @@map("deck_submissions")
+}
