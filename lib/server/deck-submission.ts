@@ -12,18 +12,26 @@ import type { DeckSubmissionRequest, DeckSubmissionResult } from "@/lib/types";
 import { SHUFFLE_ACTION_TYPES } from "@/lib/types";
 import type { DeckStorage } from "@/lib/server/storage";
 
+// The action log is stored as-is, so these caps bound what one request can
+// write. Real shuffles log at most three numeric meta fields per action.
+export const MAX_ACTIONS = 1_000;
+const MAX_META_FIELDS = 8;
+
 const actionSchema = z.object({
   type: z.enum(SHUFFLE_ACTION_TYPES),
   at: z.string().datetime(),
-  meta: z.record(z.union([z.number(), z.string(), z.boolean()])).optional(),
+  meta: z
+    .record(z.string().max(32), z.union([z.number(), z.string().max(64), z.boolean()]))
+    .refine((meta) => Object.keys(meta).length <= MAX_META_FIELDS)
+    .optional(),
 });
 
 const submissionSchema = z.object({
-  deck: z.array(z.string()),
+  deck: z.array(z.string().max(8)).max(52),
   nickname: z.string().trim().optional(),
   actionCount: z.number().int().nonnegative(),
   durationMs: z.number().int().nonnegative(),
-  actions: z.array(actionSchema),
+  actions: z.array(actionSchema).max(MAX_ACTIONS),
 });
 
 export class DeckSubmissionError extends Error {

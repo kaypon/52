@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { createCanonicalDeck, MIN_ACTION_COUNT } from "@/lib/deck";
-import { processDeckSubmission } from "@/lib/server/deck-submission";
+import { applyShuffleAction, createCanonicalDeck, MIN_ACTION_COUNT } from "@/lib/deck";
+import { MAX_ACTIONS, processDeckSubmission } from "@/lib/server/deck-submission";
 import { MemoryDeckStorage } from "@/lib/server/storage";
 import type { DeckStorage, RecordDeckSubmissionInput } from "@/lib/server/storage";
 import type { DeckListEntry, DeckOrder, StoredDeckRecord } from "@/lib/types";
@@ -118,5 +118,64 @@ describe("deck submission service", () => {
     expect(decks[0]?.nickname).toBe("entropy cowboy");
     expect(decks[0]?.seenCount).toBe(1);
     expect(decks[0]?.deckOrder).toHaveLength(52);
+  });
+
+  it("accepts the metadata real shuffles produce", async () => {
+    const storage = new TestStorage();
+    let deck = createCanonicalDeck();
+    const actions = (["split", "riffle", "overhand", "randomize"] as const).flatMap((type) =>
+      [1, 2].map(() => {
+        const next = applyShuffleAction(deck, type);
+        deck = next.deck;
+        return next.action;
+      }),
+    );
+
+    const result = await processDeckSubmission(
+      { deck, actionCount: actions.length, durationMs: 6_000, actions },
+      storage,
+    );
+
+    expect(result.isNew).toBe(true);
+  });
+
+  it("rejects action logs over the size cap", async () => {
+    const storage = new TestStorage();
+    const actionCount = MAX_ACTIONS + 1;
+
+    await expect(
+      processDeckSubmission(
+        {
+          deck: createCanonicalDeck(),
+          actionCount,
+          durationMs: 6_000,
+          actions: Array.from({ length: actionCount }, () => ({
+            type: "split" as const,
+            at: new Date().toISOString(),
+          })),
+        },
+        storage,
+      ),
+    ).rejects.toThrow("Submission payload is invalid.");
+  });
+
+  it("rejects oversized action metadata", async () => {
+    const storage = new TestStorage();
+
+    await expect(
+      processDeckSubmission(
+        {
+          deck: createCanonicalDeck(),
+          actionCount: MIN_ACTION_COUNT,
+          durationMs: 6_000,
+          actions: Array.from({ length: MIN_ACTION_COUNT }, () => ({
+            type: "split" as const,
+            at: new Date().toISOString(),
+            meta: { note: "x".repeat(10_000) },
+          })),
+        },
+        storage,
+      ),
+    ).rejects.toThrow("Submission payload is invalid.");
   });
 });

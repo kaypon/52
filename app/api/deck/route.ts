@@ -4,10 +4,17 @@ import { DeckSubmissionError, processDeckSubmission } from "@/lib/server/deck-su
 import { getDeckStorage } from "@/lib/server/storage";
 import type { DeckSubmissionRequest } from "@/lib/types";
 
+// Everyone sees the same list, so Vercel's CDN serves one copy for a few
+// seconds instead of waking the database on every view. Browsers don't cache it.
+const SHARED_LIST_HEADERS = {
+  "Cache-Control": "no-store",
+  "Vercel-CDN-Cache-Control": "max-age=5, stale-while-revalidate=30",
+};
+
 export async function GET() {
   try {
     const decks = await getDeckStorage().listDecks();
-    return NextResponse.json({ decks }, { status: 200 });
+    return NextResponse.json({ decks }, { status: 200, headers: SHARED_LIST_HEADERS });
   } catch {
     return NextResponse.json({ error: "Unable to load the deck records." }, { status: 500 });
   }
